@@ -126,12 +126,11 @@
 		SM_HTTP_PARSE_HEADERS,			// Reads and parses headers one at a time
 		SM_HTTP_AUTHENTICATE,			// Validates the current authorization state
 		SM_HTTP_PROCESS_GET,			// Invokes user callback for GET args or cookies
-                #if defined (STACK_USE_WEBSOCKETS)
-                SM_HTTP_INIT_WEBSOCKET,
-                SM_HTTP_PROC_WEBSOCKET,
-                SM_HTTP_CLOSE_WEBSOCKET,
-                #endif
-                SM_HTTP_PROCESS_POST,			// Invokes user callback for POSTed data
+        #if defined (STACK_USE_WEBSOCKETS)
+        SM_HTTP_INIT_WEBSOCKET,
+        SM_HTTP_PROC_WEBSOCKET,
+        #endif
+        SM_HTTP_PROCESS_POST,			// Invokes user callback for POSTed data
 		SM_HTTP_PROCESS_REQUEST,		// Begins the process of returning data
 		SM_HTTP_SERVE_HEADERS,			// Sends any required headers for the response
 		SM_HTTP_SERVE_COOKIES,			// Adds any cookies to the response
@@ -200,11 +199,9 @@
 		HTTP_STATUS httpStatus;				// Request method/status
 	    HTTP_FILE_TYPE fileType;			// File type to return with Content-Type
 		BYTE data[HTTP_MAX_DATA_LEN];		// General purpose data buffer
-                #if defined STACK_USE_WEBSOCKETS
-                BYTE Key[WebSocketKeyLength];
-                BYTE smWebSocket;
-                WORD DataLength;
-                #endif
+        #if defined STACK_USE_WEBSOCKETS
+        BYTE webSocketKey[WS_KEY_LENGTH];
+        #endif
 		#if defined(HTTP_USE_POST)
 		BYTE smPost;						// POST state machine variable
 		#endif

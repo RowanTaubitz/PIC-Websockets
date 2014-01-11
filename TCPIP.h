@@ -109,16 +109,16 @@
 
 	#if defined(STACK_USE_SNMP_SERVER) && defined (STACK_USE_SNMPV3_SERVER)
 		#define STACK_USE_MD5
+		#define STACK_USE_SHA1
+	#endif
+
+    #if defined STACK_USE_WEBSOCKETS
         #define STACK_USE_SHA1
-        #endif
-
-        #if defined STACK_USE_WEBSOCKETS
-            #define STACK_USE_SHA1
-            #define STACK_USE_BASE64_ENCODE
-        #endif
+        #define STACK_USE_BASE64_ENCODE
+    #endif
 #endif
-
-// FTP is not supported in MPFS2 or when MPFS is stored in internal program 
+	
+	// FTP is not supported in MPFS2 or when MPFS is stored in internal program 
 	// memory (instead of external EEPROM).
 	#if ( (!defined(MPFS_USE_EEPROM) && !defined(MPFS_USE_SPI_FLASH)) || defined(STACK_USE_MPFS2) ) && defined(STACK_USE_FTP)
 		#error FTP server is not supported with HTTP2 / MPFS2, or with internal Flash memory storage
@@ -349,8 +349,8 @@
 	#include "TCPIP Stack/UART.h"
 #endif
 
-#if defined(STAKCK_USE_WEBSOCKETS)
-        #include "TCPIP Stack/WebSocket.h"
+#if defined(STACK_USE_WEBSOCKETS)
+    #include "TCPIP Stack/WebSocket.h"
 #endif
 
 #if defined(STACK_USE_DHCP_CLIENT) || defined(STACK_USE_DHCP_SERVER)
@@ -389,7 +389,7 @@
 
 #if defined(STACK_USE_SNMP_SERVER)
 	#include "TCPIP Stack/SNMP.h"
-	#include "mib.h"
+	#include "TCPIP Stack/mib.h"
 #endif
 
 #if defined(STACK_USE_NBNS)

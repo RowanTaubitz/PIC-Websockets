@@ -2,18 +2,18 @@
  *
  *  HyperText Transfer Protocol (HTTP) Server
  *  Module for Microchip TCP/IP Stack
- *   -Serves dynamic pages to web browsers such as Microsoft Internet 
+ *   -Serves dynamic pages to web browsers such as Microsoft Internet
  *    Explorer, Mozilla Firefox, etc.
- *	 -Reference: RFC 2616
+ *     -Reference: RFC 2616
  *
  **********************************************************************
  * FileName:        HTTP2.c
  * Dependencies:    TCP, MPFS2, Tick, CustomHTTPApp.c callbacks
  * Processor:       PIC18, PIC24F, PIC24H, dsPIC30F, dsPIC33F, PIC32
  * Compiler:        Microchip C32 v1.05 or higher
- *					Microchip C30 v3.12 or higher
- *					Microchip C18 v3.30 or higher
- *					HI-TECH PICC-18 PRO 9.63PL2 or higher
+ *                  Microchip C30 v3.12 or higher
+ *                  Microchip C18 v3.30 or higher
+ *                  HI-TECH PICC-18 PRO 9.63PL2 or higher
  * Company:         Microchip Technology, Inc.
  *
  * Software License Agreement
@@ -27,9 +27,9 @@
  *      digital signal controller product ("Device") which is
  *      integrated into Licensee's product; or
  * (ii) ONLY the Software driver source files ENC28J60.c, ENC28J60.h,
- *		ENCX24J600.c and ENCX24J600.h ported to a non-Microchip device
- *		used in conjunction with a Microchip ethernet controller for
- *		the sole purpose of interfacing with the ethernet controller.
+ *        ENCX24J600.c and ENCX24J600.h ported to a non-Microchip device
+ *        used in conjunction with a Microchip ethernet controller for
+ *        the sole purpose of interfacing with the ethernet controller.
  *
  * You should refer to the license agreement accompanying this
  * Software for additional information regarding your rights and
@@ -51,7 +51,7 @@
  * Author               Date        Comment
  *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Nilesh Rajbharti     8/14/01     Original
- * Elliott Wood			6/4/07		Complete rewrite, known as HTTP2
+ * Elliott Wood            6/4/07        Complete rewrite, known as HTTP2
  ********************************************************************/
 
 #define __HTTP2_C
@@ -62,319 +62,319 @@
 
     #include "HTTPPrint.h"
     #if defined STACK_USE_WEBSOCKETS
-        #include "TCPIP Stack/WebSocket.h"
-int WebSocketEventRequest[MAX_HTTP_CONNECTIONS];
+        #include "WebSocket.h"
+        int WebSocketEventRequest[MAX_HTTP_CONNECTIONS];
     #endif
 /****************************************************************************
   Section:
-	String Constants
+    String Constants
   ***************************************************************************/
-	static ROM BYTE HTTP_CRLF[] = "\r\n";	// New line sequence
-	#define HTTP_CRLF_LEN	2				// Length of above string
-		
+    static ROM BYTE HTTP_CRLF[] = "\r\n";    // New line sequence
+    #define HTTP_CRLF_LEN    2                // Length of above string
+
 /****************************************************************************
   Section:
-	File and Content Type Settings
+    File and Content Type Settings
   ***************************************************************************/
-	// File type extensions corresponding to HTTP_FILE_TYPE
-	static ROM char * ROM httpFileExtensions[HTTP_UNKNOWN+1] =
-	{
-	    "txt",          // HTTP_TXT
-	    "htm",          // HTTP_HTM
-	    "html",         // HTTP_HTML
-	    "cgi",          // HTTP_CGI
-	    "xml",          // HTTP_XML
-	    "css",          // HTTP_CSS
-	    "gif",          // HTTP_GIF
-	    "png",          // HTTP_PNG
-	    "jpg",          // HTTP_JPG
-	    "cla",          // HTTP_JAVA
-	    "wav",          // HTTP_WAV
-		"\0\0\0"		// HTTP_UNKNOWN
-	};
-	
-	// Content-type strings corresponding to HTTP_FILE_TYPE
-	static ROM char * ROM httpContentTypes[HTTP_UNKNOWN+1] =
-	{
-	    "text/plain",            // HTTP_TXT
-	    "text/html",             // HTTP_HTM
-	    "text/html",             // HTTP_HTML
-	    "text/html",             // HTTP_CGI
-	    "text/xml",              // HTTP_XML
-	    "text/css",              // HTTP_CSS
-	    "image/gif",             // HTTP_GIF
-	    "image/png",             // HTTP_PNG
-	    "image/jpeg",            // HTTP_JPG
-	    "application/java-vm",   // HTTP_JAVA
-	    "audio/x-wave",          // HTTP_WAV
-		""						 // HTTP_UNKNOWN
-	};
-		
+    // File type extensions corresponding to HTTP_FILE_TYPE
+    static ROM char * ROM httpFileExtensions[HTTP_UNKNOWN+1] =
+    {
+        "txt",          // HTTP_TXT
+        "htm",          // HTTP_HTM
+        "html",         // HTTP_HTML
+        "cgi",          // HTTP_CGI
+        "xml",          // HTTP_XML
+        "css",          // HTTP_CSS
+        "gif",          // HTTP_GIF
+        "png",          // HTTP_PNG
+        "jpg",          // HTTP_JPG
+        "cla",          // HTTP_JAVA
+        "wav",          // HTTP_WAV
+        "\0\0\0"        // HTTP_UNKNOWN
+    };
+
+    // Content-type strings corresponding to HTTP_FILE_TYPE
+    static ROM char * ROM httpContentTypes[HTTP_UNKNOWN+1] =
+    {
+        "text/plain",            // HTTP_TXT
+        "text/html",             // HTTP_HTM
+        "text/html",             // HTTP_HTML
+        "text/html",             // HTTP_CGI
+        "text/xml",              // HTTP_XML
+        "text/css",              // HTTP_CSS
+        "image/gif",             // HTTP_GIF
+        "image/png",             // HTTP_PNG
+        "image/jpeg",            // HTTP_JPG
+        "application/java-vm",   // HTTP_JAVA
+        "audio/x-wave",          // HTTP_WAV
+        ""                         // HTTP_UNKNOWN
+    };
+
 /****************************************************************************
   Section:
-	Commands and Server Responses
+    Commands and Server Responses
   ***************************************************************************/
-	// Initial response strings (Corresponding to HTTP_STATUS)
-	static ROM char * ROM HTTPResponseHeaders[] =
-	{
-		"HTTP/1.1 200 OK\r\nConnection: close\r\n",
+    // Initial response strings (Corresponding to HTTP_STATUS)
+    static ROM char * ROM HTTPResponseHeaders[] =
+    {
+        "HTTP/1.1 200 OK\r\nConnection: close\r\n",
                 #if defined (STACK_USE_WEBSOCKETS)
                 "HTTP/1.1 200 OK\r\nPLACEHOLDER:WEBSOCKETS\r\n",
                 #endif
-		"HTTP/1.1 200 OK\r\nConnection: close\r\n",
-		"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n400 Bad Request: can't handle Content-Length\r\n",
-		"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"Protected\"\r\nConnection: close\r\n\r\n401 Unauthorized: Password required\r\n",
-		#if defined(HTTP_MPFS_UPLOAD)
-		"HTTP/1.1 404 Not found\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n404: File not found<br>Use <a href=\"/" HTTP_MPFS_UPLOAD "\">MPFS Upload</a> to program web pages\r\n",
-		#else		
-		"HTTP/1.1 404 Not found\r\nConnection: close\r\n\r\n404: File not found\r\n",
-		#endif
-		"HTTP/1.1 414 Request-URI Too Long\r\nConnection: close\r\n\r\n414 Request-URI Too Long: Buffer overflow detected\r\n",
-		"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n500 Internal Server Error: Expected data not present\r\n",
-		"HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n501 Not Implemented: Only GET and POST supported\r\n",
-		#if defined(HTTP_MPFS_UPLOAD)
-		"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body style=\"margin:100px\"><form method=post action=\"/" HTTP_MPFS_UPLOAD "\" enctype=\"multipart/form-data\"><b>MPFS Image Upload</b><p><input type=file name=i size=40> &nbsp; <input type=submit value=\"Upload\"></form></body></html>",
-		"",
-		"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body style=\"margin:100px\"><b>MPFS Update Successful</b><p><a href=\"/\">Site main page</a></body></html>",
-		"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body style=\"margin:100px\"><b>MPFS Image Corrupt or Wrong Version</b><p><a href=\"/" HTTP_MPFS_UPLOAD "\">Try again?</a></body></html>",
-		#endif
-		"HTTP/1.1 302 Found\r\nConnection: close\r\nLocation: ",
-		"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n403 Forbidden: SSL Required - use HTTPS\r\n"
-	};
-	
-/****************************************************************************
-  Section:
-	Header Parsing Configuration
-  ***************************************************************************/
-	
-	// Header strings for which we'd like to parse
-	static ROM char * ROM HTTPRequestHeaders[] =
-	{
-		"Cookie:",
-		"Authorization:",
-		"Content-Length:",
-                "Sec-WebSocket-Key:"
-	};
-	
-	// Set to length of longest string above
-	#define HTTP_MAX_HEADER_LEN		(18u)
+        "HTTP/1.1 200 OK\r\nConnection: close\r\n",
+        "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n400 Bad Request: can't handle Content-Length\r\n",
+        "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"Protected\"\r\nConnection: close\r\n\r\n401 Unauthorized: Password required\r\n",
+        #if defined(HTTP_MPFS_UPLOAD)
+        "HTTP/1.1 404 Not found\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n404: File not found<br>Use <a href=\"/" HTTP_MPFS_UPLOAD "\">MPFS Upload</a> to program web pages\r\n",
+        #else
+        "HTTP/1.1 404 Not found\r\nConnection: close\r\n\r\n404: File not found\r\n",
+        #endif
+        "HTTP/1.1 414 Request-URI Too Long\r\nConnection: close\r\n\r\n414 Request-URI Too Long: Buffer overflow detected\r\n",
+        "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n500 Internal Server Error: Expected data not present\r\n",
+        "HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n501 Not Implemented: Only GET and POST supported\r\n",
+        #if defined(HTTP_MPFS_UPLOAD)
+        "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body style=\"margin:100px\"><form method=post action=\"/" HTTP_MPFS_UPLOAD "\" enctype=\"multipart/form-data\"><b>MPFS Image Upload</b><p><input type=file name=i size=40> &nbsp; <input type=submit value=\"Upload\"></form></body></html>",
+        "",
+        "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body style=\"margin:100px\"><b>MPFS Update Successful</b><p><a href=\"/\">Site main page</a></body></html>",
+        "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body style=\"margin:100px\"><b>MPFS Image Corrupt or Wrong Version</b><p><a href=\"/" HTTP_MPFS_UPLOAD "\">Try again?</a></body></html>",
+        #endif
+        "HTTP/1.1 302 Found\r\nConnection: close\r\nLocation: ",
+        "HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n403 Forbidden: SSL Required - use HTTPS\r\n"
+    };
 
 /****************************************************************************
   Section:
-	HTTP Connection State Global Variables
+    Header Parsing Configuration
   ***************************************************************************/
-	#if defined(__18CXX) && !defined(HI_TECH_C)	
-		#pragma udata HTTP_CONNECTION_STATES
-	#endif
-	#if defined(HTTP_SAVE_CONTEXT_IN_PIC_RAM)
-		HTTP_CONN					HTTPControlBlocks[MAX_HTTP_CONNECTIONS];
-		#define HTTPLoadConn(a)		do{curHTTPID = (a);}while(0)
-	#else
-		HTTP_CONN curHTTP;							// Current HTTP connection state
-		static void HTTPLoadConn(BYTE hHTTP);
-	#endif
-	HTTP_STUB httpStubs[MAX_HTTP_CONNECTIONS];	// HTTP stubs with state machine and socket
-	BYTE curHTTPID;								// ID of the currently loaded HTTP_CONN
-	#if defined(__18CXX) && !defined(HI_TECH_C)	
-		#pragma udata
-	#endif
+
+    // Header strings for which we'd like to parse
+    static ROM char * ROM HTTPRequestHeaders[] =
+    {
+        "Cookie:",
+        "Authorization:",
+        "Content-Length:",
+        "Sec-WebSocket-Key:"
+    };
+
+    // Set to length of longest string above
+    #define HTTP_MAX_HEADER_LEN        (18u)
 
 /****************************************************************************
   Section:
-	Function Prototypes
+    HTTP Connection State Global Variables
   ***************************************************************************/
-	static void HTTPHeaderParseLookup(BYTE i);
-	#if defined(HTTP_USE_COOKIES)
-	static void HTTPHeaderParseCookie(void);
-	#endif
-	#if defined(HTTP_USE_AUTHENTICATION)
-	static void HTTPHeaderParseAuthorization(void);
-	#endif
-	#if defined(HTTP_USE_POST)
-	static void HTTPHeaderParseContentLength(void);
-	static HTTP_READ_STATUS HTTPReadTo(BYTE delim, BYTE* buf, WORD len);
-	#endif
+    #if defined(__18CXX) && !defined(HI_TECH_C)
+        #pragma udata HTTP_CONNECTION_STATES
+    #endif
+    #if defined(HTTP_SAVE_CONTEXT_IN_PIC_RAM)
+        HTTP_CONN                    HTTPControlBlocks[MAX_HTTP_CONNECTIONS];
+        #define HTTPLoadConn(a)        do{curHTTPID = (a);}while(0)
+    #else
+        HTTP_CONN curHTTP;                            // Current HTTP connection state
+        static void HTTPLoadConn(BYTE hHTTP);
+    #endif
+    HTTP_STUB httpStubs[MAX_HTTP_CONNECTIONS];    // HTTP stubs with state machine and socket
+    BYTE curHTTPID;                                // ID of the currently loaded HTTP_CONN
+    #if defined(__18CXX) && !defined(HI_TECH_C)
+        #pragma udata
+    #endif
+
+/****************************************************************************
+  Section:
+    Function Prototypes
+  ***************************************************************************/
+    static void HTTPHeaderParseLookup(BYTE i);
+    #if defined(HTTP_USE_COOKIES)
+    static void HTTPHeaderParseCookie(void);
+    #endif
+    #if defined(HTTP_USE_AUTHENTICATION)
+    static void HTTPHeaderParseAuthorization(void);
+    #endif
+    #if defined(HTTP_USE_POST)
+    static void HTTPHeaderParseContentLength(void);
+    static HTTP_READ_STATUS HTTPReadTo(BYTE delim, BYTE* buf, WORD len);
+    #endif
         #if defined (STACK_USE_WEBSOCKETS)
         static void HTTPHeaderParseWebsocketKey(void);
         #endif
-	
-	static void HTTPProcess(void);
-	static BOOL HTTPSendFile(void);
 
-	#if defined(HTTP_MPFS_UPLOAD)
-	static HTTP_IO_RESULT HTTPMPFSUpload(void);
-	#endif
+    static void HTTPProcess(void);
+    static BOOL HTTPSendFile(void);
 
-	#define mMIN(a, b)	((a<b)?a:b)
-	#define smHTTP		httpStubs[curHTTPID].sm			// Access the current state machine
+    #if defined(HTTP_MPFS_UPLOAD)
+    static HTTP_IO_RESULT HTTPMPFSUpload(void);
+    #endif
+
+    #define mMIN(a, b)    ((a<b)?a:b)
+    #define smHTTP        httpStubs[curHTTPID].sm            // Access the current state machine
 
 /*****************************************************************************
   Function:
-	void HTTPInit(void)
+    void HTTPInit(void)
 
   Summary:
-	Initializes the HTTP server module.
+    Initializes the HTTP server module.
 
   Description:
-	Sets all HTTP sockets to the listening state, and initializes the
-	state machine and file handles for each connection.  If SSL is
-	enabled, opens a socket on that port as well.
+    Sets all HTTP sockets to the listening state, and initializes the
+    state machine and file handles for each connection.  If SSL is
+    enabled, opens a socket on that port as well.
 
   Precondition:
-	TCP must already be initialized.
+    TCP must already be initialized.
 
   Parameters:
-	None
+    None
 
   Returns:
-  	None
-  	
+      None
+
   Remarks:
-	This function is called only one during lifetime of the application.
+    This function is called only one during lifetime of the application.
   ***************************************************************************/
 void HTTPInit(void)
 {
     for(curHTTPID = 0; curHTTPID < MAX_HTTP_CONNECTIONS; curHTTPID++)
     {
-		smHTTP = SM_HTTP_IDLE;
-		sktHTTP = TCPOpen(0, TCP_OPEN_SERVER, HTTP_PORT, TCP_PURPOSE_HTTP_SERVER);
-		#if defined(STACK_USE_SSL_SERVER)
-		TCPAddSSLListener(sktHTTP, HTTPS_PORT);
-		#endif
-		
-	    // Save the default record (just invalid file handles)
-		curHTTP.file = MPFS_INVALID_HANDLE;
-		curHTTP.offsets = MPFS_INVALID_HANDLE;
-		#if !defined(HTTP_SAVE_CONTEXT_IN_PIC_RAM)
-		{
-			PTR_BASE oldPtr;
+        smHTTP = SM_HTTP_IDLE;
+        sktHTTP = TCPOpen(0, TCP_OPEN_SERVER, HTTP_PORT, TCP_PURPOSE_HTTP_SERVER);
+        #if defined(STACK_USE_SSL_SERVER)
+        TCPAddSSLListener(sktHTTP, HTTPS_PORT);
+        #endif
 
-			oldPtr = MACSetWritePtr(BASE_HTTPB_ADDR + curHTTPID*sizeof(HTTP_CONN));
-			MACPutArray((BYTE*)&curHTTP, sizeof(HTTP_CONN));
-			MACSetWritePtr(oldPtr);
-		}
-		#endif
+        // Save the default record (just invalid file handles)
+        curHTTP.file = MPFS_INVALID_HANDLE;
+        curHTTP.offsets = MPFS_INVALID_HANDLE;
+        #if !defined(HTTP_SAVE_CONTEXT_IN_PIC_RAM)
+        {
+            PTR_BASE oldPtr;
+
+            oldPtr = MACSetWritePtr(BASE_HTTPB_ADDR + curHTTPID*sizeof(HTTP_CONN));
+            MACPutArray((BYTE*)&curHTTP, sizeof(HTTP_CONN));
+            MACSetWritePtr(oldPtr);
+        }
+        #endif
     }
 
-	// Set curHTTPID to zero so that first call to HTTPLoadConn() doesn't write 
-	// dummy data outside reserved HTTP memory.
-    curHTTPID = 0;	
+    // Set curHTTPID to zero so that first call to HTTPLoadConn() doesn't write
+    // dummy data outside reserved HTTP memory.
+    curHTTPID = 0;
 }
 
 
 /*****************************************************************************
   Function:
-	void HTTPServer(void)
+    void HTTPServer(void)
 
   Summary:
-	Performs periodic tasks for the HTTP2 module.
+    Performs periodic tasks for the HTTP2 module.
 
   Description:
-	Browses through each open connection and attempts to process any
-	pending operations.
+    Browses through each open connection and attempts to process any
+    pending operations.
 
   Precondition:
-	HTTPInit() must already be called.
+    HTTPInit() must already be called.
 
   Parameters:
-	None
+    None
 
   Returns:
-  	None
-  	
+      None
+
   Remarks:
-	This function acts as a task (similar to one in an RTOS).  It
-	performs its task in a co-operative manner, and the main application
-	must call this function repeatedly to ensure that all open or new
-	connections are served in a timely fashion.
+    This function acts as a task (similar to one in an RTOS).  It
+    performs its task in a co-operative manner, and the main application
+    must call this function repeatedly to ensure that all open or new
+    connections are served in a timely fashion.
   ***************************************************************************/
 void HTTPServer(void)
 {
-	BYTE conn;
+    BYTE conn;
 
-	for(conn = 0; conn < MAX_HTTP_CONNECTIONS; conn++)
-	{
-		if(httpStubs[conn].socket == INVALID_SOCKET)
-			continue;
-		
-		// If a socket is disconnected at any time 
-		// forget about it and return to idle state.
-		// Must do this here, otherwise we will wait until a new
-		// connection arrives, which causes problems with Linux and with SSL
-		if(TCPWasReset(httpStubs[conn].socket))
-		{
-			HTTPLoadConn(conn);
-			smHTTP = SM_HTTP_IDLE;
+    for(conn = 0; conn < MAX_HTTP_CONNECTIONS; conn++)
+    {
+        if(httpStubs[conn].socket == INVALID_SOCKET)
+            continue;
 
-			// Make sure any opened files are closed
-			if(curHTTP.file != MPFS_INVALID_HANDLE)
-			{
-				MPFSClose(curHTTP.file);
-				curHTTP.file = MPFS_INVALID_HANDLE;
-			}
-			if(curHTTP.offsets != MPFS_INVALID_HANDLE)
-			{
-				MPFSClose(curHTTP.offsets);
-				curHTTP.offsets = MPFS_INVALID_HANDLE;
-			}
+        // If a socket is disconnected at any time
+        // forget about it and return to idle state.
+        // Must do this here, otherwise we will wait until a new
+        // connection arrives, which causes problems with Linux and with SSL
+        if(TCPWasReset(httpStubs[conn].socket))
+        {
+            HTTPLoadConn(conn);
+            smHTTP = SM_HTTP_IDLE;
 
-			// Adjust FIFO sizes to half and half.  Default state must remain
-			// here so that SSL handshakes, if required, can proceed
-			TCPAdjustFIFOSize(sktHTTP, 1, 0, TCP_ADJUST_PRESERVE_RX);
-		}
-		
-		// Determine if this connection is eligible for processing
-		if(httpStubs[conn].sm != SM_HTTP_IDLE || TCPIsGetReady(httpStubs[conn].socket))
-		{
-			HTTPLoadConn(conn);
-			HTTPProcess();
-		}
-	}
+            // Make sure any opened files are closed
+            if(curHTTP.file != MPFS_INVALID_HANDLE)
+            {
+                MPFSClose(curHTTP.file);
+                curHTTP.file = MPFS_INVALID_HANDLE;
+            }
+            if(curHTTP.offsets != MPFS_INVALID_HANDLE)
+            {
+                MPFSClose(curHTTP.offsets);
+                curHTTP.offsets = MPFS_INVALID_HANDLE;
+            }
+
+            // Adjust FIFO sizes to half and half.  Default state must remain
+            // here so that SSL handshakes, if required, can proceed
+            TCPAdjustFIFOSize(sktHTTP, 1, 0, TCP_ADJUST_PRESERVE_RX);
+        }
+
+        // Determine if this connection is eligible for processing
+        if(httpStubs[conn].sm != SM_HTTP_IDLE || TCPIsGetReady(httpStubs[conn].socket))
+        {
+            HTTPLoadConn(conn);
+            HTTPProcess();
+        }
+    }
 }
 
 /*****************************************************************************
   Function:
-	static void HTTPLoadConn(BYTE hHTTP)
+    static void HTTPLoadConn(BYTE hHTTP)
 
   Summary:
-	Switches the currently loaded connection for the HTTP2 module.
+    Switches the currently loaded connection for the HTTP2 module.
 
   Description:
-	Saves the currently loaded HTTP connection back to Ethernet buffer
-	RAM, then loads the selected connection into curHTTP in local RAM
-	for processing.
+    Saves the currently loaded HTTP connection back to Ethernet buffer
+    RAM, then loads the selected connection into curHTTP in local RAM
+    for processing.
 
   Precondition:
-	None
+    None
 
   Parameters:
-	hHTTP - the connection ID to load
+    hHTTP - the connection ID to load
 
   Returns:
-  	None
+      None
   ***************************************************************************/
 #if !defined(HTTP_SAVE_CONTEXT_IN_PIC_RAM)
 static void HTTPLoadConn(BYTE hHTTP)
 {
     WORD oldPtr;
-    
+
     // Return if already loaded
     if(hHTTP == curHTTPID)
-    	return;
-    
+        return;
+
     // Save the old one
     oldPtr = MACSetWritePtr(BASE_HTTPB_ADDR + curHTTPID*sizeof(HTTP_CONN));
-	MACPutArray((BYTE*)&curHTTP, sizeof(HTTP_CONN));
-	MACSetWritePtr(oldPtr);
-	
-	// Load the new one
+    MACPutArray((BYTE*)&curHTTP, sizeof(HTTP_CONN));
+    MACSetWritePtr(oldPtr);
+
+    // Load the new one
     oldPtr = MACSetReadPtr(BASE_HTTPB_ADDR + hHTTP*sizeof(HTTP_CONN));
-	MACGetArray((BYTE*)&curHTTP, sizeof(HTTP_CONN));
-	MACSetReadPtr(oldPtr);
-	
-	// Remember which one is loaded
-	curHTTPID = hHTTP;
-			
+    MACGetArray((BYTE*)&curHTTP, sizeof(HTTP_CONN));
+    MACSetReadPtr(oldPtr);
+
+    // Remember which one is loaded
+    curHTTPID = hHTTP;
+
 }
 #endif
 
@@ -395,29 +395,14 @@ static void HTTPLoadConn(BYTE hHTTP)
         None
  *
  ***************************************************************************/
-#if defined (STACK_USE_WEBSOCKETS)
-#pragma udata WS_OutBuffer
-                            BYTE MyOutBuff[MaxFrameLength + 2];
-#pragma udata
-#pragma udata WS_Frame1
-                            WebSocketFrame MyFrame;
-#pragma udata
-#pragma udata WS_Frame2
-                            WebSocketFrame OutFrame;
-#pragma udata
-#endif
 static void HTTPProcess(void) {
-    
+
     WORD lenA, lenB;
     BYTE c, i;
     BOOL isDone;
     BYTE *ext;
     BYTE buffer[HTTP_MAX_HEADER_LEN + 1];
-#if defined (STACK_USE_WEBSOCKETS)
-    int PutLength, StreamLength, Opcode, ReplyLength;
-    BYTE *MyOutBuffPTR = MyOutBuff;
-#endif
-    
+
     do {
         isDone = TRUE;
 
@@ -440,12 +425,9 @@ static void HTTPProcess(void) {
     #if defined(HTTP_USE_POST)
                     curHTTP.smPost = 0x00;
     #endif
-                    #if defined (STACK_USE_WEBSOCKETS)
-                    if (smHTTP != SM_HTTP_PROC_WEBSOCKET && smHTTP != SM_HTTP_INIT_WEBSOCKET)
-                    {
-                        curHTTP.Key[0] = '\0';
-                    }
-                    #endif
+    #if defined (STACK_USE_WEBSOCKETS)
+                    curHTTP.webSocketKey[0] = '\0';
+    #endif
 
                     // Adjust the TCP FIFOs for optimal reception of
                     // the next HTTP request from the browser
@@ -493,7 +475,7 @@ static void HTTPProcess(void) {
                     isDone = FALSE;
                     break;
                 }
-                
+
                 // Find end of filename
                 lenA = TCPFind(sktHTTP, ' ', 0, FALSE);
                 lenB = TCPFindEx(sktHTTP, '?', 0, lenA, FALSE);
@@ -713,7 +695,7 @@ static void HTTPProcess(void) {
                 if (!curHTTP.hasArgs)
                     smHTTP = SM_HTTP_PROCESS_POST;
     #if defined (STACK_USE_WEBSOCKETS)
-                if (curHTTP.Key[0] != '\0')
+                if (curHTTP.webSocketKey[0] != '\0')
                     smHTTP = SM_HTTP_INIT_WEBSOCKET;
     #endif
                 isDone = FALSE;
@@ -734,87 +716,18 @@ static void HTTPProcess(void) {
             case SM_HTTP_INIT_WEBSOCKET:
                 Nop();
 
-                if(!TCPIsConnected(sktHTTP))
-                    Nop();
-                PutLength = TCPIsPutReady(sktHTTP);
-                if (PutLength < MaxFrameLength + 2)//wait for enough room for reply
-                    break;
-
-                CreateHandShake(sktHTTP,curHTTP.Key);
-                smHTTP = SM_HTTP_PROC_WEBSOCKET;
+                if (!TCPIsConnected(sktHTTP)) Nop();
+                
+                if (doHandShake(curHTTP.webSocketKey) == 0) {
+                    smHTTP = SM_HTTP_PROC_WEBSOCKET;
+                }
+                
                 break;
             case SM_HTTP_PROC_WEBSOCKET:
                 Nop();
-                
-                ReplyLength = TCPIsGetReady(sktHTTP);
-                if (ReplyLength && (TCPIsPutReady(sktHTTP) >= MaxFrameLength + 2)) {
-                    TCPGetArray(sktHTTP, (BYTE*) &MyFrame, ReplyLength);
-                    ReplyLength = UnMaskFrame(&MyFrame);
-                    
-                    if (!MyFrame.FIN) {
-                        //not supported
-                        MyFrame.PayloadLen = 4;
-                        memcpy(MyFrame.data,"1009",4);
-                        TCPPutArray(sktHTTP, (BYTE*) &MyFrame, MyFrame.PayloadLen + 2);
-                        TCPFlush(sktHTTP);
-                        smHTTP = SM_HTTP_CLOSE_WEBSOCKET;
-                        break;
-                    } else if (MyFrame.Opcode == TextFrame) {
-                        #ifdef WebEcho
-                        MyFrame.Opcode = TextFrame;
-                        MyFrame.Mask = 0;
-                        TCPPutArray(sktHTTP, (BYTE*) &MyFrame, MyFrame.PayloadLen + 2);
-                        TCPFlush(sktHTTP);
-        #else
-                        WebSocketNewFrame(MyFrame.data, ReplyLength, curHTTPID, TextFrame);
-        #endif
-                    } else if (MyFrame.Opcode == BinaryFrame) {
-                        //Haven't seen anyone with this capability yet...
-                        WebSocketNewFrame(MyFrame.data, ReplyLength, curHTTPID, BinaryFrame);
-                    } else if (MyFrame.Opcode == ConnectionClose) {
-                        //Echo close
-                        TCPPutArray(sktHTTP, (BYTE*) &MyFrame, MyFrame.PayloadLen + 2);
-                        TCPFlush(sktHTTP);
-                        smHTTP = SM_HTTP_CLOSE_WEBSOCKET;
-                        break;
-                    } else if (MyFrame.Opcode == WSPing) {
-                        MyFrame.Mask = 0;
-                        MyFrame.Opcode = WSPong;
-                        TCPPutArray(sktHTTP, (BYTE*) &MyFrame, MyFrame.PayloadLen + 2);
-                        TCPFlush(sktHTTP); //reply to ping
-                    } else if (MyFrame.Opcode == WSPong) {
-                        //not implemented yet, reply to my ping
-                    } else {
-                        //not supported
-                        MyFrame.PayloadLen = 4;
-                        memcpy(MyFrame.data,"1009",4);
-                        TCPPutArray(sktHTTP, (BYTE*) &MyFrame, MyFrame.PayloadLen + 2);
-                        TCPFlush(sktHTTP);
-                        smHTTP = SM_HTTP_CLOSE_WEBSOCKET;
-                        break;
-                    }
-                } else {
-                    if (WebSocketEventRequest[curHTTPID]) {
-                        if (TCPIsPutReady(sktHTTP) >= MaxFrameLength + 2) {
-                            WebSocketGetFrame(MyOutBuffPTR, &StreamLength, &Opcode, curHTTPID);
-                            
-                            if (StreamLength > 0) {
-                                CreateFrame(&OutFrame, MyOutBuffPTR, StreamLength, Opcode);
-                                TCPPutArray(sktHTTP, (BYTE*) &OutFrame, StreamLength + 2);
-                                TCPFlush(sktHTTP);
-                            }
-                            WebSocketEventRequest[curHTTPID] = 0;//Clear event request
-                        }
-                    }
-                    else
-                    {
-                        HTTPExecuteWebSocket(curHTTPID);
-                    }
-                }
+
+                smHTTP = WebSocketProcess(smHTTP);
                 break;
-                case SM_HTTP_CLOSE_WEBSOCKET:
-                    smHTTP = SM_HTTP_DISCONNECT;
-                    break;
     #endif
 
             case SM_HTTP_PROCESS_POST:
@@ -909,7 +822,7 @@ static void HTTPProcess(void) {
                 if (curHTTP.httpStatus == HTTP_REDIRECT) {
                     TCPPutString(sktHTTP, curHTTP.data);
                     TCPPutROMString(sktHTTP, (ROM BYTE*) "\r\n\r\n304 Redirect: ");
-                    TCPPut(sktHTTP, curHTTP.data);
+                    TCPPutString(sktHTTP, curHTTP.data);
                     TCPPutROMString(sktHTTP, (ROM BYTE*) HTTP_CRLF);
                 }
 
@@ -1057,69 +970,69 @@ static void HTTPProcess(void) {
 
 /*****************************************************************************
   Function:
-	static BOOL HTTPSendFile(void)
+    static BOOL HTTPSendFile(void)
 
   Description:
-	Serves up the next chunk of curHTTP's file, up to a) available TX FIFO
-	space or b) the next callback index, whichever comes first.
+    Serves up the next chunk of curHTTP's file, up to a) available TX FIFO
+    space or b) the next callback index, whichever comes first.
 
   Precondition:
-	curHTTP.file and curHTTP.offsets have both been opened for reading.
+    curHTTP.file and curHTTP.offsets have both been opened for reading.
 
   Parameters:
-	None
+    None
 
   Return Values:
-	TRUE - the end of the file was reached and reading is done
-	FALSE - more data remains to be read
+    TRUE - the end of the file was reached and reading is done
+    FALSE - more data remains to be read
   ***************************************************************************/
 static BOOL HTTPSendFile(void)
 {
-	WORD numBytes, len;
-	BYTE c, data[64];
-	
-	// Determine how many bytes we can read right now
-	len = TCPIsPutReady(sktHTTP);
-	numBytes = mMIN(len, curHTTP.nextCallback - curHTTP.byteCount);
-	
-	// Get/put as many bytes as possible
-	curHTTP.byteCount += numBytes;
-	while(numBytes > 0u)
-	{
-		len = MPFSGetArray(curHTTP.file, data, mMIN(numBytes, sizeof(data)));
-		if(len == 0u)
-			return TRUE;
-		else
-			TCPPutArray(sktHTTP, data, len);
-		numBytes -= len;
-	}
-	
-	// Check if a callback index was reached
-	if(curHTTP.byteCount == curHTTP.nextCallback)
-	{
-		// Update the state machine
-		smHTTP = SM_HTTP_SEND_FROM_CALLBACK;
-		curHTTP.callbackPos = 0;
+    WORD numBytes, len;
+    BYTE c, data[64];
 
-		// Read past the variable name and close the MPFS
-		MPFSGet(curHTTP.file, NULL);
-		do
-		{
-			if(!MPFSGet(curHTTP.file, &c))
-				break;
-			curHTTP.byteCount++;
-		} while(c != '~');
-		curHTTP.byteCount++;
-		
-		// Read in the callback address and next offset
-		MPFSGetLong(curHTTP.offsets, &(curHTTP.callbackID));
-		if(!MPFSGetLong(curHTTP.offsets, &(curHTTP.nextCallback)))
-		{
-			curHTTP.nextCallback = 0xffffffff;
-			MPFSClose(curHTTP.offsets);
-			curHTTP.offsets = MPFS_INVALID_HANDLE;
-		}
-	}
+    // Determine how many bytes we can read right now
+    len = TCPIsPutReady(sktHTTP);
+    numBytes = mMIN(len, curHTTP.nextCallback - curHTTP.byteCount);
+
+    // Get/put as many bytes as possible
+    curHTTP.byteCount += numBytes;
+    while(numBytes > 0u)
+    {
+        len = MPFSGetArray(curHTTP.file, data, mMIN(numBytes, sizeof(data)));
+        if(len == 0u)
+            return TRUE;
+        else
+            TCPPutArray(sktHTTP, data, len);
+        numBytes -= len;
+    }
+
+    // Check if a callback index was reached
+    if(curHTTP.byteCount == curHTTP.nextCallback)
+    {
+        // Update the state machine
+        smHTTP = SM_HTTP_SEND_FROM_CALLBACK;
+        curHTTP.callbackPos = 0;
+
+        // Read past the variable name and close the MPFS
+        MPFSGet(curHTTP.file, NULL);
+        do
+        {
+            if(!MPFSGet(curHTTP.file, &c))
+                break;
+            curHTTP.byteCount++;
+        } while(c != '~');
+        curHTTP.byteCount++;
+
+        // Read in the callback address and next offset
+        MPFSGetLong(curHTTP.offsets, &(curHTTP.callbackID));
+        if(!MPFSGetLong(curHTTP.offsets, &(curHTTP.nextCallback)))
+        {
+            curHTTP.nextCallback = 0xffffffff;
+            MPFSClose(curHTTP.offsets);
+            curHTTP.offsets = MPFS_INVALID_HANDLE;
+        }
+    }
 
     // We are not done sending a file yet...
     return FALSE;
@@ -1127,883 +1040,883 @@ static BOOL HTTPSendFile(void)
 
 /*****************************************************************************
   Function:
-	static void HTTPHeaderParseLookup(BYTE i)
+    static void HTTPHeaderParseLookup(BYTE i)
 
   Description:
-	Calls the appropriate header parser based on the index of the header
-	that was read from the request.
+    Calls the appropriate header parser based on the index of the header
+    that was read from the request.
 
   Precondition:
-	None
+    None
 
   Parameters:
-	i - the index of the string found in HTTPRequestHeaders
+    i - the index of the string found in HTTPRequestHeaders
 
   Return Values:
-	TRUE - the end of the file was reached and reading is done
-	FALSE - more data remains to be read
+    TRUE - the end of the file was reached and reading is done
+    FALSE - more data remains to be read
   ***************************************************************************/
 static void HTTPHeaderParseLookup(BYTE i)
 {
-	// i corresponds to an index in HTTPRequestHeaders
-	#if defined(HTTP_USE_COOKIES)
-	if(i == 0u)
-	{
-		HTTPHeaderParseCookie();
-		return;
-	}
-	#endif
-	
-	#if defined(HTTP_USE_AUTHENTICATION)	
-	if(i == 1u)
-	{
-		HTTPHeaderParseAuthorization();
-		return;
-	}
-	#endif
-	
-	#if defined(HTTP_USE_POST)
-	if(i == 2u)
-	{
-		HTTPHeaderParseContentLength();
-		return;
-	}
-	#endif
-        #if defined(STACK_USE_WEBSOCKETS)
-	if(i == 3u)
-	{
-		HTTPHeaderParseWebsocketKey();
-		return;
-	}
-	#endif
-        
+    // i corresponds to an index in HTTPRequestHeaders
+    #if defined(HTTP_USE_COOKIES)
+    if(i == 0u)
+    {
+        HTTPHeaderParseCookie();
+        return;
+    }
+    #endif
+
+    #if defined(HTTP_USE_AUTHENTICATION)
+    if(i == 1u)
+    {
+        HTTPHeaderParseAuthorization();
+        return;
+    }
+    #endif
+
+    #if defined(HTTP_USE_POST)
+    if(i == 2u)
+    {
+        HTTPHeaderParseContentLength();
+        return;
+    }
+    #endif
+    
+    #if defined(STACK_USE_WEBSOCKETS)
+    if(i == 3u)
+    {
+        HTTPHeaderParseWebsocketKey();
+        return;
+    }
+    #endif
+
 }
 
 /*****************************************************************************
   Function:
-	static void HTTPHeaderParseAuthorization(void)
+    static void HTTPHeaderParseAuthorization(void)
 
   Summary:
-	Parses the "Authorization:" header for a request and verifies the
-	credentials.
+    Parses the "Authorization:" header for a request and verifies the
+    credentials.
 
   Description:
-	Parses the "Authorization:" header for a request.  For example, 
-	"BASIC YWRtaW46cGFzc3dvcmQ=" is decoded to a user name of "admin" and
-	a password of "password".  Once read, HTTPCheckAuth is called from
-	CustomHTTPApp.c to determine if the credentials are acceptable.
+    Parses the "Authorization:" header for a request.  For example,
+    "BASIC YWRtaW46cGFzc3dvcmQ=" is decoded to a user name of "admin" and
+    a password of "password".  Once read, HTTPCheckAuth is called from
+    CustomHTTPApp.c to determine if the credentials are acceptable.
 
-	The return value of HTTPCheckAuth is saved in curHTTP.isAuthorized for
-	later use by the application.
+    The return value of HTTPCheckAuth is saved in curHTTP.isAuthorized for
+    later use by the application.
 
   Precondition:
-	None
+    None
 
   Parameters:
-	None
+    None
 
   Returns:
-	None
+    None
 
   Remarks:
-	This function is ony available when HTTP_USE_AUTHENTICATION is defined.
+    This function is ony available when HTTP_USE_AUTHENTICATION is defined.
   ***************************************************************************/
 #if defined(HTTP_USE_AUTHENTICATION)
 static void HTTPHeaderParseAuthorization(void)
 {
     WORD len;
     BYTE buf[40];
-	BYTE *ptrBuf;
-	
-	// If auth processing is not required, return
-	if(curHTTP.isAuthorized & 0x80)
-		return;
+    BYTE *ptrBuf;
 
-	// Clear the auth type ("BASIC ")
-	TCPGetArray(sktHTTP, NULL, 6);
+    // If auth processing is not required, return
+    if(curHTTP.isAuthorized & 0x80)
+        return;
 
-	// Find the terminating CRLF and make sure it's a multiple of four
-	len = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
-	len += 3;
-	len &= 0xfc;
-	len = mMIN(len, sizeof(buf)-4);
-	
-	// Read in 4 bytes at a time and decode (slower, but saves RAM)
-	for(ptrBuf = buf; len > 0u; len-=4, ptrBuf+=3)
-	{
-		TCPGetArray(sktHTTP, ptrBuf, 4);
-		Base64Decode(ptrBuf, 4, ptrBuf, 3);
-	}
+    // Clear the auth type ("BASIC ")
+    TCPGetArray(sktHTTP, NULL, 6);
 
-	// Null terminate both, and make sure there's at least two terminators
-	*ptrBuf = '\0';
-	for(len = 0, ptrBuf = buf; len < sizeof(buf); len++, ptrBuf++)
-		if(*ptrBuf == ':')
-			break;
-	*(ptrBuf++) = '\0';
-	
-	// Verify credentials
-	curHTTP.isAuthorized = HTTPCheckAuth(buf, ptrBuf);
+    // Find the terminating CRLF and make sure it's a multiple of four
+    len = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
+    len += 3;
+    len &= 0xfc;
+    len = mMIN(len, sizeof(buf)-4);
 
-	return;
+    // Read in 4 bytes at a time and decode (slower, but saves RAM)
+    for(ptrBuf = buf; len > 0u; len-=4, ptrBuf+=3)
+    {
+        TCPGetArray(sktHTTP, ptrBuf, 4);
+        Base64Decode(ptrBuf, 4, ptrBuf, 3);
+    }
+
+    // Null terminate both, and make sure there's at least two terminators
+    *ptrBuf = '\0';
+    for(len = 0, ptrBuf = buf; len < sizeof(buf); len++, ptrBuf++)
+        if(*ptrBuf == ':')
+            break;
+    *(ptrBuf++) = '\0';
+
+    // Verify credentials
+    curHTTP.isAuthorized = HTTPCheckAuth(buf, ptrBuf);
+
+    return;
 }
 #endif
 
 /*****************************************************************************
   Function:
-	static void HTTPHeaderParseCookie(void)
+    static void HTTPHeaderParseCookie(void)
 
   Summary:
-	Parses the "Cookie:" headers for a request and stores them as GET
-	variables.
+    Parses the "Cookie:" headers for a request and stores them as GET
+    variables.
 
   Description:
-	Parses the "Cookie:" headers for a request.  For example, 
- 	"Cookie: name=Wile+E.+Coyote; order=ROCKET_LAUNCHER" is decoded to 
-	"name=Wile+E.+Coyote&order=ROCKET_LAUNCHER&" and stored as any other 
-	GET variable in curHTTP.data.
+    Parses the "Cookie:" headers for a request.  For example,
+     "Cookie: name=Wile+E.+Coyote; order=ROCKET_LAUNCHER" is decoded to
+    "name=Wile+E.+Coyote&order=ROCKET_LAUNCHER&" and stored as any other
+    GET variable in curHTTP.data.
 
-	The user application can easily access these values later using the
-	HTTPGetArg() and HTTPGetROMArg() functions.
+    The user application can easily access these values later using the
+    HTTPGetArg() and HTTPGetROMArg() functions.
 
   Precondition:
-	None
+    None
 
   Parameters:
-	None
+    None
 
   Returns:
-	None
+    None
 
   Remarks:
-	This function is ony available when HTTP_USE_COOKIES is defined.
+    This function is ony available when HTTP_USE_COOKIES is defined.
   ***************************************************************************/
 #if defined(HTTP_USE_COOKIES)
 static void HTTPHeaderParseCookie(void)
 {
-	WORD lenA, lenB;
+    WORD lenA, lenB;
 
-	// Verify there's enough space
-	lenB = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
-	if(lenB >= (WORD)(curHTTP.data + HTTP_MAX_DATA_LEN - curHTTP.ptrData - 2))
-	{// If not, overflow
-		curHTTP.httpStatus = HTTP_OVERFLOW;
-		smHTTP = SM_HTTP_SERVE_HEADERS;
-		return;
-	}
+    // Verify there's enough space
+    lenB = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
+    if(lenB >= (WORD)(curHTTP.data + HTTP_MAX_DATA_LEN - curHTTP.ptrData - 2))
+    {// If not, overflow
+        curHTTP.httpStatus = HTTP_OVERFLOW;
+        smHTTP = SM_HTTP_SERVE_HEADERS;
+        return;
+    }
 
-	// While a CRLF is not immediate, grab a cookie value
-	while(lenB != 0u)
-	{
-		// Look for a ';' and use the shorter of that or a CRLF
-		lenA = TCPFind(sktHTTP, ';', 0, FALSE);
-		
-		// Read to the terminator
-		curHTTP.ptrData += TCPGetArray(sktHTTP, curHTTP.ptrData, mMIN(lenA, lenB));
-		
-		// Insert an & to anticipate another cookie
-		*(curHTTP.ptrData++) = '&';
-		
-		// If semicolon, trash it and whitespace
-		if(lenA < lenB)
-		{
-			TCPGet(sktHTTP, NULL);
-			while(TCPFind(sktHTTP, ' ', 0, FALSE) == 0u)
-				TCPGet(sktHTTP, NULL);
-		}
-		
-		// Find the new distance to the CRLF
-		lenB = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
-	}
+    // While a CRLF is not immediate, grab a cookie value
+    while(lenB != 0u)
+    {
+        // Look for a ';' and use the shorter of that or a CRLF
+        lenA = TCPFind(sktHTTP, ';', 0, FALSE);
 
-	return;
+        // Read to the terminator
+        curHTTP.ptrData += TCPGetArray(sktHTTP, curHTTP.ptrData, mMIN(lenA, lenB));
+
+        // Insert an & to anticipate another cookie
+        *(curHTTP.ptrData++) = '&';
+
+        // If semicolon, trash it and whitespace
+        if(lenA < lenB)
+        {
+            TCPGet(sktHTTP, NULL);
+            while(TCPFind(sktHTTP, ' ', 0, FALSE) == 0u)
+                TCPGet(sktHTTP, NULL);
+        }
+
+        // Find the new distance to the CRLF
+        lenB = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
+    }
+
+    return;
 
 }
 #endif
 
 /*****************************************************************************
   Function:
-	static void HTTPHeaderParseContentLength(void)
+    static void HTTPHeaderParseContentLength(void)
 
   Summary:
-	Parses the "Content-Length:" header for a request.
+    Parses the "Content-Length:" header for a request.
 
   Description:
-	Parses the "Content-Length:" header to determine how many bytes of
-	POST data to expect after the request.  This value is stored in 
-	curHTTP.byteCount.
+    Parses the "Content-Length:" header to determine how many bytes of
+    POST data to expect after the request.  This value is stored in
+    curHTTP.byteCount.
 
   Precondition:
-	None
+    None
 
   Parameters:
-	None
+    None
 
   Returns:
-	None
+    None
 
   Remarks:
-	This function is ony available when HTTP_USE_POST is defined.
+    This function is ony available when HTTP_USE_POST is defined.
   ***************************************************************************/
 #if defined(HTTP_USE_POST)
 static void HTTPHeaderParseContentLength(void)
 {
-	WORD len;
-	BYTE buf[10];
+    WORD len;
+    BYTE buf[10];
 
-	// Read up to the CRLF (max 9 bytes or ~1GB)
-	len = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
-	if(len >= sizeof(buf))
-	{
-		curHTTP.httpStatus = HTTP_BAD_REQUEST;
-		curHTTP.byteCount = 0;
-		return;
-	}	
-	len = TCPGetArray(sktHTTP, buf, len);
-	buf[len] = '\0';
-	
-	curHTTP.byteCount = atol((char*)buf);
+    // Read up to the CRLF (max 9 bytes or ~1GB)
+    len = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
+    if(len >= sizeof(buf))
+    {
+        curHTTP.httpStatus = HTTP_BAD_REQUEST;
+        curHTTP.byteCount = 0;
+        return;
+    }
+    len = TCPGetArray(sktHTTP, buf, len);
+    buf[len] = '\0';
+
+    curHTTP.byteCount = atol((char*)buf);
 }
 #endif
 
 /*****************************************************************************
   Function:
-	static void HTTPHeaderParseWebsocketKey(void)
+    static void HTTPHeaderParseWebsocketKey(void)
 
   Summary:
-	Parses the "Sec-Websocket-Key:" header for a the Websocket Key.
+    Parses the "Sec-Websocket-Key:" header for a the Websocket Key.
 
   Description:
-	Parses the "Sec-Websocket-Key:" header to determine the Websocket
+    Parses the "Sec-Websocket-Key:" header to determine the Websocket
         Handshake Key.
 
   Precondition:
-	None
+    None
 
   Parameters:
-	None
+    None
 
   Returns:
-	None
+    None
 
   Remarks:
-	This function is ony available when HTTP_USE_POST is defined.
+    This function is ony available when STACK_USE_WEBSOCKETS is defined.
   ***************************************************************************/
 #if defined(STACK_USE_WEBSOCKETS)
 static void HTTPHeaderParseWebsocketKey(void)
 {
-        int a = 0;
-
-	WORD len;
-	BYTE buf[WebSocketKeyLength];
-
-	// Read up to the CRLF (should be 24 bytes)
-	len = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
-	if(len != WebSocketKeyLength)
-	{
-		curHTTP.httpStatus = HTTP_BAD_REQUEST;
-		curHTTP.byteCount = 0;
-		return;
-	}
-	len = TCPGetArray(sktHTTP, buf, len);
-
-        for (a = 0; a < len; a++)
-        {
-            curHTTP.Key[a] = buf[a];
-        }
-        TCPAdjustFIFOSize(sktHTTP, 1, 0, TCP_ADJUST_PRESERVE_RX);
-        smHTTP = SM_HTTP_INIT_WEBSOCKET;
-        curHTTP.httpStatus = WEBSOCKET_FRAME;
-
+    int  index;
+    WORD length;
+    BYTE buffer[WS_KEY_LENGTH];
+    
+    // Read up to the CRLF (should be 24 bytes)
+    length = TCPFindROMArray(sktHTTP, HTTP_CRLF, HTTP_CRLF_LEN, 0, FALSE);
+    
+    if (length != WS_KEY_LENGTH) {
+        curHTTP.httpStatus = HTTP_BAD_REQUEST;
+        curHTTP.byteCount  = 0;
+        return;
+    }
+    
+    length = TCPGetArray(sktHTTP, buffer, length);
+    
+    for (index = 0; index < length; index++) {
+        curHTTP.webSocketKey[index] = buffer[index];
+    }
+    
+    TCPAdjustFIFOSize(sktHTTP, 1, 0, TCP_ADJUST_PRESERVE_RX);
+    smHTTP             = SM_HTTP_INIT_WEBSOCKET;
+    curHTTP.httpStatus = WEBSOCKET_FRAME;
 }
 #endif
 
 /*****************************************************************************
   Function:
-	BYTE* HTTPURLDecode(BYTE* cData)
+    BYTE* HTTPURLDecode(BYTE* cData)
 
   Summary:
-	Parses a string from URL encoding to plain-text.
+    Parses a string from URL encoding to plain-text.
 
   Description:
-	Parses a string from URL encoding to plain-text.  The following
-	conversions are made: �=� to �\0�, �&� to �\0�, �+� to � �, and
-	�%xx� to a single hex byte.
- 
-	After completion, the data has been decoded and a null terminator
-	signifies the end of a name or value.  A second null terminator (or a
-	null name parameter) indicates the end of all the data.
+    Parses a string from URL encoding to plain-text.  The following
+    conversions are made: �=� to �\0�, �&� to �\0�, �+� to � �, and
+    �%xx� to a single hex byte.
+
+    After completion, the data has been decoded and a null terminator
+    signifies the end of a name or value.  A second null terminator (or a
+    null name parameter) indicates the end of all the data.
 
   Precondition:
-	The data parameter is null terminated and has at least one extra
-	byte free.
+    The data parameter is null terminated and has at least one extra
+    byte free.
 
   Parameters:
-	cData - The string which is to be decoded in place.
+    cData - The string which is to be decoded in place.
 
   Returns:
-	A pointer to the last null terminator in data, which is also the
-	first free byte for new data.
+    A pointer to the last null terminator in data, which is also the
+    first free byte for new data.
 
   Remarks:
-	This function is called by the stack to parse GET arguments and 
-	cookie data.  User applications can use this function to decode POST
-	data, but first need to verify that the string is null-terminated.
+    This function is called by the stack to parse GET arguments and
+    cookie data.  User applications can use this function to decode POST
+    data, but first need to verify that the string is null-terminated.
   ***************************************************************************/
 BYTE* HTTPURLDecode(BYTE* cData)
 {
-	BYTE *pRead, *pWrite;
-	WORD wLen;
-	BYTE c;
-	WORD hex;
-	 
-	// Determine length of input
-	wLen = strlen((char*)cData);
-	 
-	// Read all characters in the string
-	for(pRead = pWrite = cData; wLen != 0u; )
-	{
-		c = *pRead++;
-		wLen--;
-		
-		if(c == '=' || c == '&')
-			*pWrite++ = '\0';
-		else if(c == '+')
-			*pWrite++ = ' ';
-		else if(c == '%')
-		{
-			if(wLen < 2u)
-				wLen = 0;
-			else
-			{
-				((BYTE*)&hex)[1] = *pRead++;
-				((BYTE*)&hex)[0] = *pRead++;
-				wLen--;
-				wLen--;
-				*pWrite++ = hexatob(*((WORD_VAL*)&hex));
-			}
-		}
-		else
-			*pWrite++ = c;
-	}
-	
-	// Double null terminate the last value
-	*pWrite++ = '\0';
-	*pWrite = '\0';
-	
-	return pWrite;
+    BYTE *pRead, *pWrite;
+    WORD wLen;
+    BYTE c;
+    WORD hex;
+
+    // Determine length of input
+    wLen = strlen((char*)cData);
+
+    // Read all characters in the string
+    for(pRead = pWrite = cData; wLen != 0u; )
+    {
+        c = *pRead++;
+        wLen--;
+
+        if(c == '=' || c == '&')
+            *pWrite++ = '\0';
+        else if(c == '+')
+            *pWrite++ = ' ';
+        else if(c == '%')
+        {
+            if(wLen < 2u)
+                wLen = 0;
+            else
+            {
+                ((BYTE*)&hex)[1] = *pRead++;
+                ((BYTE*)&hex)[0] = *pRead++;
+                wLen--;
+                wLen--;
+                *pWrite++ = hexatob(*((WORD_VAL*)&hex));
+            }
+        }
+        else
+            *pWrite++ = c;
+    }
+
+    // Double null terminate the last value
+    *pWrite++ = '\0';
+    *pWrite = '\0';
+
+    return pWrite;
 }
 
 /*****************************************************************************
   Function:
-	BYTE* HTTPGetArg(BYTE* cData, BYTE* cArg)
+    BYTE* HTTPGetArg(BYTE* cData, BYTE* cArg)
 
   Summary:
-	Locates a form field value in a given data array.
+    Locates a form field value in a given data array.
 
   Description:
-	Searches through a data array to find the value associated with a
-	given argument.  It can be used to find form field values in data
-	received over GET or POST.
-	
-	The end of data is assumed to be reached when a null name parameter is
-	encountered.  This requires the string to have an even number of 
-	null-terminated strings, followed by an additional null terminator.
+    Searches through a data array to find the value associated with a
+    given argument.  It can be used to find form field values in data
+    received over GET or POST.
+
+    The end of data is assumed to be reached when a null name parameter is
+    encountered.  This requires the string to have an even number of
+    null-terminated strings, followed by an additional null terminator.
 
   Precondition:
-	The data array has a valid series of null terminated name/value pairs.
+    The data array has a valid series of null terminated name/value pairs.
 
   Parameters:
-	data - the buffer to search
-	arg - the name of the argument to find
+    data - the buffer to search
+    arg - the name of the argument to find
 
   Returns:
-	A pointer to the argument value, or NULL if not found.
+    A pointer to the argument value, or NULL if not found.
   ***************************************************************************/
 BYTE* HTTPGetArg(BYTE* cData, BYTE* cArg)
 {
-	// Search through the array while bytes remain
-	while(*cData != '\0')
-	{ 
-		// Look for arg at current position
-		if(!strcmp((char*)cArg, (char*)cData))
-		{// Found it, so return parameter
-			return cData + strlen((char*)cArg) + 1;
-		}
-		
-		// Skip past two strings (NUL bytes)
-		cData += strlen((char*)cData) + 1;
-		cData += strlen((char*)cData) + 1;
-	}
-	 	
-	// Return NULL if not found
-	return NULL;
+    // Search through the array while bytes remain
+    while(*cData != '\0')
+    {
+        // Look for arg at current position
+        if(!strcmp((char*)cArg, (char*)cData))
+        {// Found it, so return parameter
+            return cData + strlen((char*)cArg) + 1;
+        }
+
+        // Skip past two strings (NUL bytes)
+        cData += strlen((char*)cData) + 1;
+        cData += strlen((char*)cData) + 1;
+    }
+
+    // Return NULL if not found
+    return NULL;
 }
 
 /*****************************************************************************
   Function:
-	BYTE* HTTPGetROMArg(BYTE* cData, ROM BYTE* cArg)
+    BYTE* HTTPGetROMArg(BYTE* cData, ROM BYTE* cArg)
 
   Summary:
-	Locates a form field value in a given data array.
+    Locates a form field value in a given data array.
 
   Description:
-	Searches through a data array to find the value associated with a
-	given argument.  It can be used to find form field values in data
-	received over GET or POST.
-	
-	The end of data is assumed to be reached when a null name parameter is
-	encountered.  This requires the string to have an even number of 
-	null-terminated strings, followed by an additional null terminator.
+    Searches through a data array to find the value associated with a
+    given argument.  It can be used to find form field values in data
+    received over GET or POST.
+
+    The end of data is assumed to be reached when a null name parameter is
+    encountered.  This requires the string to have an even number of
+    null-terminated strings, followed by an additional null terminator.
 
   Precondition:
-	The data array has a valid series of null terminated name/value pairs.
+    The data array has a valid series of null terminated name/value pairs.
 
   Parameters:
-	data - the buffer to search
-	arg - the name of the argument to find
+    data - the buffer to search
+    arg - the name of the argument to find
 
   Returns:
-	A pointer to the argument value, or NULL if not found.
+    A pointer to the argument value, or NULL if not found.
 
   Remarks:
-  	This function is aliased to HTTPGetArg on non-PIC18 platforms.
+      This function is aliased to HTTPGetArg on non-PIC18 platforms.
   ***************************************************************************/
 #if defined(__18CXX)
 BYTE* HTTPGetROMArg(BYTE* cData, ROM BYTE* cArg)
 {
-	// Search through the array while bytes remain
-	while(*cData != '\0')
-	{
-		// Look for arg at current position
-		if(!memcmppgm2ram(cData, (ROM void*)cArg, strlenpgm((ROM char*)cArg) + 1))
-		{// Found it, so skip to next string
-			return cData + strlenpgm((ROM char*)cArg) + 1;
-		}
-		
-		// Skip past two strings (NUL bytes)
-		cData += strlen((char*)cData) + 1;
-		cData += strlen((char*)cData) + 1;
-	}
-	 	
-	// Return NULL if not found
-	return NULL;
+    // Search through the array while bytes remain
+    while(*cData != '\0')
+    {
+        // Look for arg at current position
+        if(!memcmppgm2ram(cData, (ROM void*)cArg, strlenpgm((ROM char*)cArg) + 1))
+        {// Found it, so skip to next string
+            return cData + strlenpgm((ROM char*)cArg) + 1;
+        }
+
+        // Skip past two strings (NUL bytes)
+        cData += strlen((char*)cData) + 1;
+        cData += strlen((char*)cData) + 1;
+    }
+
+    // Return NULL if not found
+    return NULL;
 }
 #endif
 
 /*****************************************************************************
   Function:
-	HTTP_READ_STATUS HTTPReadPostName(BYTE* cData, WORD wLen)
+    HTTP_READ_STATUS HTTPReadPostName(BYTE* cData, WORD wLen)
 
   Summary:
-	Reads a name from a URL encoded string in the TCP buffer.
+    Reads a name from a URL encoded string in the TCP buffer.
 
   Description:
-	Reads a name from a URL encoded string in the TCP buffer.  This function
-	is meant to be called from an HTTPExecutePost callback to facilitate
-	easier parsing of incoming data.  This function also prevents buffer
-	overflows by forcing the programmer to indicate how many bytes are
-	expected.  At least 2 extra bytes are needed in cData over the maximum
-	length of data expected to be read.
-	
-	This function will read until the next '=' character, which indicates the
-	end of a name parameter.  It assumes that the front of the buffer is
-	the beginning of the name paramter to be read.
-	
-	This function properly updates curHTTP.byteCount by decrementing it
-	by the number of bytes read.  It also removes the delimiting '=' from
-	the buffer.
+    Reads a name from a URL encoded string in the TCP buffer.  This function
+    is meant to be called from an HTTPExecutePost callback to facilitate
+    easier parsing of incoming data.  This function also prevents buffer
+    overflows by forcing the programmer to indicate how many bytes are
+    expected.  At least 2 extra bytes are needed in cData over the maximum
+    length of data expected to be read.
+
+    This function will read until the next '=' character, which indicates the
+    end of a name parameter.  It assumes that the front of the buffer is
+    the beginning of the name paramter to be read.
+
+    This function properly updates curHTTP.byteCount by decrementing it
+    by the number of bytes read.  It also removes the delimiting '=' from
+    the buffer.
 
   Precondition:
-	Front of TCP buffer is the beginning of a name parameter, and the rest of
-	the TCP buffer contains a URL-encoded string with a name parameter 
-	terminated by a '=' character.
+    Front of TCP buffer is the beginning of a name parameter, and the rest of
+    the TCP buffer contains a URL-encoded string with a name parameter
+    terminated by a '=' character.
 
   Parameters:
-	cData - where to store the name once it is read
-	wLen - how many bytes can be written to cData
+    cData - where to store the name once it is read
+    wLen - how many bytes can be written to cData
 
   Return Values:
-	HTTP_READ_OK - name was successfully read
-	HTTP_READ_TRUNCTATED - entire name could not fit in the buffer, so the
-							value was truncated and data has been lost
-	HTTP_READ_INCOMPLETE - entire name was not yet in the buffer, so call
-							this function again later to retrieve
+    HTTP_READ_OK - name was successfully read
+    HTTP_READ_TRUNCTATED - entire name could not fit in the buffer, so the
+                            value was truncated and data has been lost
+    HTTP_READ_INCOMPLETE - entire name was not yet in the buffer, so call
+                            this function again later to retrieve
   ***************************************************************************/
 #if defined(HTTP_USE_POST)
 HTTP_READ_STATUS HTTPReadPostName(BYTE* cData, WORD wLen)
 {
-	HTTP_READ_STATUS status;
-	
-	status = HTTPReadTo('=', cData, wLen);
+    HTTP_READ_STATUS status;
 
-	// Decode the data (if not reading to null or blank) and return
-	if(cData && *cData)
-		HTTPURLDecode(cData);
-	return status;
-}	
-#endif
+    status = HTTPReadTo('=', cData, wLen);
 
-/*****************************************************************************
-  Function:
-	HTTP_READ_STATUS HTTPReadPostValue(BYTE* cData, WORD wLen)
-
-  Summary:
-	Reads a value from a URL encoded string in the TCP buffer.
-
-  Description:
-	Reads a value from a URL encoded string in the TCP buffer.  This function
-	is meant to be called from an HTTPExecutePost callback to facilitate
-	easier parsing of incoming data.  This function also prevents buffer
-	overflows by forcing the programmer to indicate how many bytes are
-	expected.  At least 2 extra bytes are needed in cData above the maximum
-	length of data expected to be read.
-	
-	This function will read until the next '&' character, which indicates the
-	end of a value parameter.  It assumes that the front of the buffer is
-	the beginning of the value paramter to be read.  If curHTTP.byteCount
-	indicates that all expected bytes are in the buffer, it assumes that 
-	all remaining data is the value and acts accordingly.
-	
-	This function properly updates curHTTP.byteCount by decrementing it
-	by the number of bytes read.  The terminating '&' character is also 
-	removed from the buffer.
-	
-  Precondition:
-	Front of TCP buffer is the beginning of a name parameter, and the rest of
-	the TCP buffer contains a URL-encoded string with a name parameter 
-	terminated by a '=' character.
-
-  Parameters:
-	cData - where to store the value once it is read
-	wLen - how many bytes can be written to cData
-
-  Return Values:
-	HTTP_READ_OK - value was successfully read
-	HTTP_READ_TRUNCTATED - entire value could not fit in the buffer, so the
-							value was truncated and data has been lost
-	HTTP_READ_INCOMPLETE - entire value was not yet in the buffer, so call
-							this function again later to retrieve
-  ***************************************************************************/
-#if defined(HTTP_USE_POST)
-HTTP_READ_STATUS HTTPReadPostValue(BYTE* cData, WORD wLen)
-{
-	HTTP_READ_STATUS status;
-	
-	// Try to read the value
-	status = HTTPReadTo('&', cData, wLen);
-	
-	// If read was incomplete, check if we're at the end
-	if(status == HTTP_READ_INCOMPLETE)
-	{
-		// If all data has arrived, read all remaining data
-		if(curHTTP.byteCount == TCPIsGetReady(sktHTTP))
-			status = HTTPReadTo('\0', cData, wLen);
-	}
-		
-	// Decode the data (if not reading to null or blank) and return
-	if(cData && *cData)
-		HTTPURLDecode(cData);
-	return status;
-}	
-#endif
-
-/*****************************************************************************
-  Function:
-	static HTTP_READ_STATUS HTTPReadTo(BYTE cDelim, BYTE* cData, WORD wLen)
-
-  Summary:
-	Reads to a buffer until a specified delimiter character.
-
-  Description:
-	Reads from the TCP buffer to cData until either cDelim is reached, or
-	until wLen - 2 bytes have been read.  The value read is saved to cData and 
-	null terminated.  (wLen - 2 is used so that the value can be passed to
-	HTTPURLDecode later, which requires a null terminator plus one extra free
-	byte.)
-	
-	The delimiter character is removed from the buffer, but not saved to 
-	cData. If all data cannot fit into cData, it will still be removed from 
-	the buffer but will not be saved anywhere.
-
-	This function properly updates curHTTP.byteCount by decrementing it
-	by the number of bytes read. 
-
-  Precondition:
-	None
-
-  Parameters:
-  	cDelim - the character at which to stop reading, or NULL to read to
-  			 the end of the buffer
-	cData - where to store the data being read
-	wLen - how many bytes can be written to cData
-
-  Return Values:
-	HTTP_READ_OK - data was successfully read
-	HTTP_READ_TRUNCTATED - entire data could not fit in the buffer, so the
-							data was truncated and data has been lost
-	HTTP_READ_INCOMPLETE - delimiter character was not found
-  ***************************************************************************/
-#if defined(HTTP_USE_POST)
-static HTTP_READ_STATUS HTTPReadTo(BYTE cDelim, BYTE* cData, WORD wLen)
-{
-	HTTP_READ_STATUS status;
-	WORD wPos;
-	
-	// Either look for delimiter, or read all available data
-	if(cDelim)
-		wPos = TCPFind(sktHTTP, cDelim, 0, FALSE);
-	else
-		wPos = TCPIsGetReady(sktHTTP);
-	
-	// If not found, return incomplete
-	if(wPos == 0xffff)
-		return HTTP_READ_INCOMPLETE;
-	
-	// Read the value
-	if(wLen < 2u && cData != NULL)
-	{// Buffer is too small, so read to NULL instead
-		curHTTP.byteCount -= TCPGetArray(sktHTTP, NULL, wPos);
-		status = HTTP_READ_TRUNCATED;
-	}
-	else if(cData == NULL)
-	{// Just remove the data
-		curHTTP.byteCount -= TCPGetArray(sktHTTP, NULL, wPos);
-		status = HTTP_READ_OK;
-	}
-	else if(wPos > wLen - 2)
-	{// Read data, but truncate at max length
-		curHTTP.byteCount -= TCPGetArray(sktHTTP, cData, wLen - 2);
-		curHTTP.byteCount -= TCPGetArray(sktHTTP, NULL, wPos - (wLen - 2));
-		cData[wLen - 2] = '\0';
-		status = HTTP_READ_TRUNCATED;
-	}
-	else
-	{// Read the data normally
-		curHTTP.byteCount -= TCPGetArray(sktHTTP, cData, wPos);
-		cData[wPos] = '\0';
-		status = HTTP_READ_OK;
-	}
-	
-	// Remove the delimiter
-	if(cDelim)
-		curHTTP.byteCount -= TCPGet(sktHTTP, NULL);
-	
-	return status;
-}	
-#endif
-
-/*****************************************************************************
-  Function:
-	HTTP_IO_RESULT HTTPMPFSUpload(void)
-
-  Summary:
-	Saves a file uploaded via POST as the new MPFS image in EEPROM or 
-	external Flash.
-
-  Description:
-	Allows the MPFS image in EEPROM or external Flash to be updated via a 
-	web page by accepting a file upload and storing it to the external memory.
-
-  Precondition:
-	MPFSFormat() has been called.
-
-  Parameters:
-	None
-
-  Return Values:
-	HTTP_IO_DONE - on success
-	HTTP_IO_NEED_DATA - if more data is still expected
-
-  Remarks:
-	This function is only available when MPFS uploads are enabled and
-	the MPFS image is stored in EEPROM.
-
-  Internal:
-	After the headers, the first line from the form will be the MIME
-	separator.  Following that is more headers about the file, which
-	are discarded.  After another CRLFCRLF pair the file data begins,
-	which is read 16 bytes at a time and written to external memory.
-  ***************************************************************************/
-#if defined(HTTP_MPFS_UPLOAD)
-static HTTP_IO_RESULT HTTPMPFSUpload(void)
-{
-	BYTE c[16];
-	WORD lenA, lenB;
-	
-	switch(curHTTP.httpStatus)
-	{
-		// New upload, so look for the CRLFCRLF
-		case HTTP_MPFS_UP:
-		
-			lenA = TCPFindROMArray(sktHTTP, (ROM BYTE*)"\r\n\r\n", 4, 0, FALSE);
-		
-			if(lenA != 0xffff)
-			{// Found it, so remove all data up to and including
-				lenA = TCPGetArray(sktHTTP, NULL, lenA);
-				curHTTP.byteCount -= lenA;
-				
-				// Make sure first 6 bytes are also in
-				if(TCPIsGetReady(sktHTTP) < (4u + 6u) )
-				{
-					lenA++;
-					return HTTP_IO_NEED_DATA;
-				}
-				
-				// Make sure it's an MPFS of the correct version
-				lenA = TCPGetArray(sktHTTP, c, 10);
-				curHTTP.byteCount -= lenA;
-				if(memcmppgm2ram(c, (ROM void*)"\r\n\r\nMPFS\x02\x01", 10) == 0)
-				{// Read as Ver 2.1
-					curHTTP.httpStatus = HTTP_MPFS_OK;
-					
-					// Format MPFS storage and put 6 byte tag
-					curHTTP.file = MPFSFormat();
-					MPFSPutArray(curHTTP.file, &c[4], 6);
-				}
-				else
-				{// Version is wrong
-					curHTTP.httpStatus = HTTP_MPFS_ERROR;
-				}
-				
-				return HTTP_IO_WAITING;
-			}
-			else
-			{// Otherwise, remove as much as possible
-				lenA = TCPGetArray(sktHTTP, NULL, TCPIsGetReady(sktHTTP) - 4);
-				curHTTP.byteCount -= lenA;
-			}
-			
-			break;
-		
-		// Received file is invalid
-		case HTTP_MPFS_ERROR:
-			curHTTP.byteCount -= TCPIsGetReady(sktHTTP);
-			TCPDiscard(sktHTTP);
-			if(curHTTP.byteCount < 100u || curHTTP.byteCount > 0x80000000u)
-			{// If almost all data was read, or if we overflowed, then return
-				smHTTP = SM_HTTP_SERVE_HEADERS;
-				return HTTP_IO_DONE;
-			}
-			break;
-		
-		// File is verified, so write the data
-		case HTTP_MPFS_OK:
-			// Determine how much to read
-			lenA = TCPIsGetReady(sktHTTP);
-			if(lenA > curHTTP.byteCount)
-				lenA = curHTTP.byteCount;
-				
-			while(lenA > 0u)
-			{
-				lenB = TCPGetArray(sktHTTP, c, mMIN(lenA,16u));
-				curHTTP.byteCount -= lenB;
-				lenA -= lenB;
-				MPFSPutArray(curHTTP.file, c, lenB);
-			}
-				
-			// If we've read all the data
-			if(curHTTP.byteCount == 0u)
-			{
-				MPFSPutEnd(TRUE);
-				smHTTP = SM_HTTP_SERVE_HEADERS;
-				return HTTP_IO_DONE;
-			}
-			
-		// Other states are not valid here
-		default:
-			break;
-	}
-		
-	// Ask for more data
-	return HTTP_IO_NEED_DATA;
-	
+    // Decode the data (if not reading to null or blank) and return
+    if(cData && *cData)
+        HTTPURLDecode(cData);
+    return status;
 }
 #endif
 
 /*****************************************************************************
   Function:
-	void HTTPIncFile(ROM BYTE* cFile)
+    HTTP_READ_STATUS HTTPReadPostValue(BYTE* cData, WORD wLen)
 
   Summary:
-	Writes a file byte-for-byte to the currently loaded TCP socket.
+    Reads a value from a URL encoded string in the TCP buffer.
 
   Description:
-	Allows an entire file to be included as a dynamic variable, providing
-	a basic templating system for HTML web pages.  This reduces unneeded
-	duplication of visual elements such as headers, menus, etc.
+    Reads a value from a URL encoded string in the TCP buffer.  This function
+    is meant to be called from an HTTPExecutePost callback to facilitate
+    easier parsing of incoming data.  This function also prevents buffer
+    overflows by forcing the programmer to indicate how many bytes are
+    expected.  At least 2 extra bytes are needed in cData above the maximum
+    length of data expected to be read.
 
-	When curHTTP.callbackPos is 0, the file is opened and as many bytes
-	as possible are written.  The current position is then saved to 
-	curHTTP.callbackPos and the file is closed.  On subsequent calls, 
-	reading begins at the saved location and continues.  Once the end of
-	the input file is reached, curHTTP.callbackPos is set back to 0 to 
-	indicate completion.
+    This function will read until the next '&' character, which indicates the
+    end of a value parameter.  It assumes that the front of the buffer is
+    the beginning of the value paramter to be read.  If curHTTP.byteCount
+    indicates that all expected bytes are in the buffer, it assumes that
+    all remaining data is the value and acts accordingly.
+
+    This function properly updates curHTTP.byteCount by decrementing it
+    by the number of bytes read.  The terminating '&' character is also
+    removed from the buffer.
 
   Precondition:
-	None
+    Front of TCP buffer is the beginning of a name parameter, and the rest of
+    the TCP buffer contains a URL-encoded string with a name parameter
+    terminated by a '=' character.
 
   Parameters:
-	cFile - the name of the file to be sent
+    cData - where to store the value once it is read
+    wLen - how many bytes can be written to cData
+
+  Return Values:
+    HTTP_READ_OK - value was successfully read
+    HTTP_READ_TRUNCTATED - entire value could not fit in the buffer, so the
+                            value was truncated and data has been lost
+    HTTP_READ_INCOMPLETE - entire value was not yet in the buffer, so call
+                            this function again later to retrieve
+  ***************************************************************************/
+#if defined(HTTP_USE_POST)
+HTTP_READ_STATUS HTTPReadPostValue(BYTE* cData, WORD wLen)
+{
+    HTTP_READ_STATUS status;
+
+    // Try to read the value
+    status = HTTPReadTo('&', cData, wLen);
+
+    // If read was incomplete, check if we're at the end
+    if(status == HTTP_READ_INCOMPLETE)
+    {
+        // If all data has arrived, read all remaining data
+        if(curHTTP.byteCount == TCPIsGetReady(sktHTTP))
+            status = HTTPReadTo('\0', cData, wLen);
+    }
+
+    // Decode the data (if not reading to null or blank) and return
+    if(cData && *cData)
+        HTTPURLDecode(cData);
+    return status;
+}
+#endif
+
+/*****************************************************************************
+  Function:
+    static HTTP_READ_STATUS HTTPReadTo(BYTE cDelim, BYTE* cData, WORD wLen)
+
+  Summary:
+    Reads to a buffer until a specified delimiter character.
+
+  Description:
+    Reads from the TCP buffer to cData until either cDelim is reached, or
+    until wLen - 2 bytes have been read.  The value read is saved to cData and
+    null terminated.  (wLen - 2 is used so that the value can be passed to
+    HTTPURLDecode later, which requires a null terminator plus one extra free
+    byte.)
+
+    The delimiter character is removed from the buffer, but not saved to
+    cData. If all data cannot fit into cData, it will still be removed from
+    the buffer but will not be saved anywhere.
+
+    This function properly updates curHTTP.byteCount by decrementing it
+    by the number of bytes read.
+
+  Precondition:
+    None
+
+  Parameters:
+      cDelim - the character at which to stop reading, or NULL to read to
+               the end of the buffer
+    cData - where to store the data being read
+    wLen - how many bytes can be written to cData
+
+  Return Values:
+    HTTP_READ_OK - data was successfully read
+    HTTP_READ_TRUNCTATED - entire data could not fit in the buffer, so the
+                            data was truncated and data has been lost
+    HTTP_READ_INCOMPLETE - delimiter character was not found
+  ***************************************************************************/
+#if defined(HTTP_USE_POST)
+static HTTP_READ_STATUS HTTPReadTo(BYTE cDelim, BYTE* cData, WORD wLen)
+{
+    HTTP_READ_STATUS status;
+    WORD wPos;
+
+    // Either look for delimiter, or read all available data
+    if(cDelim)
+        wPos = TCPFind(sktHTTP, cDelim, 0, FALSE);
+    else
+        wPos = TCPIsGetReady(sktHTTP);
+
+    // If not found, return incomplete
+    if(wPos == 0xffff)
+        return HTTP_READ_INCOMPLETE;
+
+    // Read the value
+    if(wLen < 2u && cData != NULL)
+    {// Buffer is too small, so read to NULL instead
+        curHTTP.byteCount -= TCPGetArray(sktHTTP, NULL, wPos);
+        status = HTTP_READ_TRUNCATED;
+    }
+    else if(cData == NULL)
+    {// Just remove the data
+        curHTTP.byteCount -= TCPGetArray(sktHTTP, NULL, wPos);
+        status = HTTP_READ_OK;
+    }
+    else if(wPos > wLen - 2)
+    {// Read data, but truncate at max length
+        curHTTP.byteCount -= TCPGetArray(sktHTTP, cData, wLen - 2);
+        curHTTP.byteCount -= TCPGetArray(sktHTTP, NULL, wPos - (wLen - 2));
+        cData[wLen - 2] = '\0';
+        status = HTTP_READ_TRUNCATED;
+    }
+    else
+    {// Read the data normally
+        curHTTP.byteCount -= TCPGetArray(sktHTTP, cData, wPos);
+        cData[wPos] = '\0';
+        status = HTTP_READ_OK;
+    }
+
+    // Remove the delimiter
+    if(cDelim)
+        curHTTP.byteCount -= TCPGet(sktHTTP, NULL);
+
+    return status;
+}
+#endif
+
+/*****************************************************************************
+  Function:
+    HTTP_IO_RESULT HTTPMPFSUpload(void)
+
+  Summary:
+    Saves a file uploaded via POST as the new MPFS image in EEPROM or
+    external Flash.
+
+  Description:
+    Allows the MPFS image in EEPROM or external Flash to be updated via a
+    web page by accepting a file upload and storing it to the external memory.
+
+  Precondition:
+    MPFSFormat() has been called.
+
+  Parameters:
+    None
+
+  Return Values:
+    HTTP_IO_DONE - on success
+    HTTP_IO_NEED_DATA - if more data is still expected
+
+  Remarks:
+    This function is only available when MPFS uploads are enabled and
+    the MPFS image is stored in EEPROM.
+
+  Internal:
+    After the headers, the first line from the form will be the MIME
+    separator.  Following that is more headers about the file, which
+    are discarded.  After another CRLFCRLF pair the file data begins,
+    which is read 16 bytes at a time and written to external memory.
+  ***************************************************************************/
+#if defined(HTTP_MPFS_UPLOAD)
+static HTTP_IO_RESULT HTTPMPFSUpload(void)
+{
+    BYTE c[16];
+    WORD lenA, lenB;
+
+    switch(curHTTP.httpStatus)
+    {
+        // New upload, so look for the CRLFCRLF
+        case HTTP_MPFS_UP:
+
+            lenA = TCPFindROMArray(sktHTTP, (ROM BYTE*)"\r\n\r\n", 4, 0, FALSE);
+
+            if(lenA != 0xffff)
+            {// Found it, so remove all data up to and including
+                lenA = TCPGetArray(sktHTTP, NULL, lenA);
+                curHTTP.byteCount -= lenA;
+
+                // Make sure first 6 bytes are also in
+                if(TCPIsGetReady(sktHTTP) < (4u + 6u) )
+                {
+                    lenA++;
+                    return HTTP_IO_NEED_DATA;
+                }
+
+                // Make sure it's an MPFS of the correct version
+                lenA = TCPGetArray(sktHTTP, c, 10);
+                curHTTP.byteCount -= lenA;
+                if(memcmppgm2ram(c, (ROM void*)"\r\n\r\nMPFS\x02\x01", 10) == 0)
+                {// Read as Ver 2.1
+                    curHTTP.httpStatus = HTTP_MPFS_OK;
+
+                    // Format MPFS storage and put 6 byte tag
+                    curHTTP.file = MPFSFormat();
+                    MPFSPutArray(curHTTP.file, &c[4], 6);
+                }
+                else
+                {// Version is wrong
+                    curHTTP.httpStatus = HTTP_MPFS_ERROR;
+                }
+
+                return HTTP_IO_WAITING;
+            }
+            else
+            {// Otherwise, remove as much as possible
+                lenA = TCPGetArray(sktHTTP, NULL, TCPIsGetReady(sktHTTP) - 4);
+                curHTTP.byteCount -= lenA;
+            }
+
+            break;
+
+        // Received file is invalid
+        case HTTP_MPFS_ERROR:
+            curHTTP.byteCount -= TCPIsGetReady(sktHTTP);
+            TCPDiscard(sktHTTP);
+            if(curHTTP.byteCount < 100u || curHTTP.byteCount > 0x80000000u)
+            {// If almost all data was read, or if we overflowed, then return
+                smHTTP = SM_HTTP_SERVE_HEADERS;
+                return HTTP_IO_DONE;
+            }
+            break;
+
+        // File is verified, so write the data
+        case HTTP_MPFS_OK:
+            // Determine how much to read
+            lenA = TCPIsGetReady(sktHTTP);
+            if(lenA > curHTTP.byteCount)
+                lenA = curHTTP.byteCount;
+
+            while(lenA > 0u)
+            {
+                lenB = TCPGetArray(sktHTTP, c, mMIN(lenA,16u));
+                curHTTP.byteCount -= lenB;
+                lenA -= lenB;
+                MPFSPutArray(curHTTP.file, c, lenB);
+            }
+
+            // If we've read all the data
+            if(curHTTP.byteCount == 0u)
+            {
+                MPFSPutEnd(TRUE);
+                smHTTP = SM_HTTP_SERVE_HEADERS;
+                return HTTP_IO_DONE;
+            }
+
+        // Other states are not valid here
+        default:
+            break;
+    }
+
+    // Ask for more data
+    return HTTP_IO_NEED_DATA;
+
+}
+#endif
+
+/*****************************************************************************
+  Function:
+    void HTTPIncFile(ROM BYTE* cFile)
+
+  Summary:
+    Writes a file byte-for-byte to the currently loaded TCP socket.
+
+  Description:
+    Allows an entire file to be included as a dynamic variable, providing
+    a basic templating system for HTML web pages.  This reduces unneeded
+    duplication of visual elements such as headers, menus, etc.
+
+    When curHTTP.callbackPos is 0, the file is opened and as many bytes
+    as possible are written.  The current position is then saved to
+    curHTTP.callbackPos and the file is closed.  On subsequent calls,
+    reading begins at the saved location and continues.  Once the end of
+    the input file is reached, curHTTP.callbackPos is set back to 0 to
+    indicate completion.
+
+  Precondition:
+    None
+
+  Parameters:
+    cFile - the name of the file to be sent
 
   Returns:
-  	None
-  	
+      None
+
   Remarks:
-	Users should not call this function directly, but should instead add
-	dynamic variables in the form of ~inc:filename.ext~ in their HTML code
-	to include (for example) the file "filename.ext" at that specified
-	location.  The MPFS2 Generator utility will handle the rest.
+    Users should not call this function directly, but should instead add
+    dynamic variables in the form of ~inc:filename.ext~ in their HTML code
+    to include (for example) the file "filename.ext" at that specified
+    location.  The MPFS2 Generator utility will handle the rest.
   ***************************************************************************/
 void HTTPIncFile(ROM BYTE* cFile)
 {
-	WORD wCount, wLen;
-	BYTE data[64];
-	MPFS_HANDLE fp;
-	
-	// Check if this is a first round call
-	if(curHTTP.callbackPos == 0x00u)
-	{// On initial call, open the file and save its ID
-		fp = MPFSOpenROM(cFile);
-		if(fp == MPFS_INVALID_HANDLE)
-		{// File not found, so abort
-			return;
-		}
-		((DWORD_VAL*)&curHTTP.callbackPos)->w[0] = MPFSGetID(fp);
-	}
-	else
-	{// The file was already opened, so load up its ID and seek
-		fp = MPFSOpenID(((DWORD_VAL*)&curHTTP.callbackPos)->w[0]);
-		if(fp == MPFS_INVALID_HANDLE)
-		{// No file handles available, so wait for now
-			return;
-		}
-		MPFSSeek(fp, ((DWORD_VAL*)&curHTTP.callbackPos)->w[1], MPFS_SEEK_FORWARD);
-	}
-	
-	// Get/put as many bytes as possible
-	wCount = TCPIsPutReady(sktHTTP);
-	while(wCount > 0u)
-	{
-		wLen = MPFSGetArray(fp, data, mMIN(wCount, sizeof(data)));
-		if(wLen == 0u)
-		{// If no bytes were read, an EOF was reached
-			MPFSClose(fp);
-			curHTTP.callbackPos = 0x00;
-			return;
-		}
-		else
-		{// Write the bytes to the socket
-			TCPPutArray(sktHTTP, data, wLen);
-			wCount -= wLen;
-		}
-	}
-	
-	// Save the new address and close the file
-	((DWORD_VAL*)&curHTTP.callbackPos)->w[1] = MPFSTell(fp);
-	MPFSClose(fp);
-	
-	return;
+    WORD wCount, wLen;
+    BYTE data[64];
+    MPFS_HANDLE fp;
+
+    // Check if this is a first round call
+    if(curHTTP.callbackPos == 0x00u)
+    {// On initial call, open the file and save its ID
+        fp = MPFSOpenROM(cFile);
+        if(fp == MPFS_INVALID_HANDLE)
+        {// File not found, so abort
+            return;
+        }
+        ((DWORD_VAL*)&curHTTP.callbackPos)->w[0] = MPFSGetID(fp);
+    }
+    else
+    {// The file was already opened, so load up its ID and seek
+        fp = MPFSOpenID(((DWORD_VAL*)&curHTTP.callbackPos)->w[0]);
+        if(fp == MPFS_INVALID_HANDLE)
+        {// No file handles available, so wait for now
+            return;
+        }
+        MPFSSeek(fp, ((DWORD_VAL*)&curHTTP.callbackPos)->w[1], MPFS_SEEK_FORWARD);
+    }
+
+    // Get/put as many bytes as possible
+    wCount = TCPIsPutReady(sktHTTP);
+    while(wCount > 0u)
+    {
+        wLen = MPFSGetArray(fp, data, mMIN(wCount, sizeof(data)));
+        if(wLen == 0u)
+        {// If no bytes were read, an EOF was reached
+            MPFSClose(fp);
+            curHTTP.callbackPos = 0x00;
+            return;
+        }
+        else
+        {// Write the bytes to the socket
+            TCPPutArray(sktHTTP, data, wLen);
+            wCount -= wLen;
+        }
+    }
+
+    // Save the new address and close the file
+    ((DWORD_VAL*)&curHTTP.callbackPos)->w[1] = MPFSTell(fp);
+    MPFSClose(fp);
+
+    return;
 }
 
 
