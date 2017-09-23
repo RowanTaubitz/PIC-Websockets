@@ -1,23 +1,27 @@
 #ifndef __WEBSOCKET_H
 #define __WEBSOCKET_H
 
+#include "tcpip/src/common/sys_fs_wrapper.h"
+
+#include "tcpip/src/http_private.h"
+
 #define WS_KEY_LENGTH 24
 
 typedef enum {
-    WS_OPCODE_CONT   = 0x00,
-    WS_OPCODE_TEXT   = 0x01,
+    WS_OPCODE_CONT = 0x00,
+    WS_OPCODE_TEXT = 0x01,
     WS_OPCODE_BINARY = 0x02,
-    WS_OPCODE_CLOSE  = 0x08,
-    WS_OPCODE_PING   = 0x09,
-    WS_OPCODE_PONG   = 0x0A
+    WS_OPCODE_CLOSE = 0x08,
+    WS_OPCODE_PING = 0x09,
+    WS_OPCODE_PONG = 0x0A
 } WS_OPCODE;
 
-int doHandShake(BYTE *key);
-int WebSocketProcess(int status);
+int TCPIP_WS_doHandShake(HTTP_CONN* pHttpCon);
+SM_HTTP2 TCPIP_WS_Process(HTTP_CONN* pHttpCon);
 
 /*****************************************************************************
  Function:
- int WebSocketSendPayload(BYTE *buffer, WORD length)
+ int TCPIP_WS_SendPayload(uint8_t *buffer, WORD length)
 
  Description:
  Creates and sends a websocket frame with the given payload.
@@ -37,11 +41,11 @@ int WebSocketProcess(int status);
  Remarks:
  payloadLength should be smaller or same as HTTP_MAX_DATA_LEN
  ***************************************************************************/
-int WebSocketSendPayload(WS_OPCODE opcode, WORD length);
+int TCPIP_WS_SendPayload(HTTP_CONN* pHttpCon, WS_OPCODE opcode, uint16_t length);
 
 /*****************************************************************************
  Function:
- int WebSocketClose(WORD status, BYTE *reason, WORD length)
+ int TCPIP_WS_Close(WORD status, uint8_t *reason, WORD length)
 
  Description:
  Sends a close connection frame with given reason and status and initiates
@@ -64,7 +68,7 @@ int WebSocketSendPayload(WS_OPCODE opcode, WORD length);
  Remarks:
  None
  ***************************************************************************/
-int WebSocketClose(WORD status, BYTE *reason, WORD length);
+int TCPIP_WS_Close(HTTP_CONN* pHttpCon, uint16_t status, uint8_t *reason, uint16_t length);
 
 /****************************************************************************
  Section:
@@ -73,7 +77,7 @@ int WebSocketClose(WORD status, BYTE *reason, WORD length);
 
 /*****************************************************************************
  Function:
- void WebSocketIncomingDataCallback(BYTE opcode, BYTE *payloadBuffer, WORD payloadLength)
+ void TCPIP_WS_IncomingDataCallback(uint8_t opcode, uint8_t *payloadBuffer, WORD payloadLength)
 
  Summary:
  Processes an Incoming WebSocket Data Frame
@@ -100,11 +104,11 @@ int WebSocketClose(WORD status, BYTE *reason, WORD length);
  This function may NOT write to the TCP buffer.
  The payload may be considered complete and finished.
  ***************************************************************************/
-extern void WebSocketIncomingDataCallback(WS_OPCODE opcode, BYTE *payloadBuffer, WORD payloadLength);
+extern void TCPIP_WS_IncomingDataCallback(HTTP_CONN* pHttpCon, WS_OPCODE opcode, uint8_t *payloadBuffer, uint16_t payloadLength);
 
 /*****************************************************************************
  Function:
- int WebSocketTaskCallback()
+ int TCPIP_WS_TaskCallback()
  
  Summary:
  Main stack task for WebSocket requests.
@@ -128,6 +132,6 @@ extern void WebSocketIncomingDataCallback(WS_OPCODE opcode, BYTE *payloadBuffer,
  Use WebSocketSendPayload() for doing the actual sending of the frames
  
  ***************************************************************************/
-extern int WebSocketTaskCallback();
+extern int TCPIP_WS_TaskCallback(HTTP_CONN* pHttpCon);
 
 #endif
